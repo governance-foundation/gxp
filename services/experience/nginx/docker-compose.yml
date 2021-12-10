@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+
+  nginx:
+    image: nginx
+    restart: always
+    working_dir: /content
+    hostname: "nginx"
+    labels:
+      - "traefik.frontend.priority=1"
+      - "traefik.enable=true"
+      - "traefik.http.routers.www.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.www.entrypoints=web"
+      - "traefik.http.routers.www_https.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.www_https.tls=true"
+      - "traefik.http.routers.www_https.entrypoints=websecure"
+    volumes:
+      - ./services/experience/nginx/content:/content
+      - ./services/experience/nginx/config/nginx.conf:/etc/nginx/nginx.conf
+    environment:
+      - TZ=${GLOBAL_TZ}
+    networks:
+      - internal
+
+networks:
+  internal:

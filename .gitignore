@@ -69,8 +69,8 @@ typings/
 .yarn-integrity
 
 # dotenv environment variables file
-.env
-.env.test
+# .env
+# .env.test
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -102,3 +102,13 @@ dist
 
 # TernJS port file
 .tern-port
+
+#services
+docker/traefik/certs/*.*
+docker/keycloak/backup/
+docker/keycloak/data/
+docker/transmission/data/
+docker/postgres/data/postgresql
+
+#git config
+!**/.gitkeep

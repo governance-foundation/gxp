@@ -1,0 +1,87 @@
+version: "3.8"
+
+# services:
+
+  # nginx:
+  #   extends:
+  #     file: ./services/experience/nginx/docker-compose.yml
+  #     service: nginx
+  #   volumes:
+  #     - ./docker/nginx/content:/content
+  #     - ./docker/nginx/config/nginx.conf:/etc/nginx/nginx.conf
+
+  # createcert:
+  #   extends:
+  #     file: ./docker/traefik/docker-compose.yml
+  #     service: createcert
+  #   volumes:
+  #     - ./docker/traefik/certs:/root/.local/share/mkcert
+
+  # createcertpkcs12:
+  #   extends:
+  #     file: ./docker/traefik/docker-compose.yml
+  #     service: createcertpkcs12
+  #   depends_on:
+  #     - createcert
+  #   volumes:
+  #     - ./docker/traefik/certs:/export
+
+  # traefik:
+  #   extends:
+  #     file: ./docker/traefik/docker-compose.yml
+  #     service: traefik
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #     # Persist certificates, so we can restart as often as needed
+  #     - ./docker/traefik/certs:/letsencrypt
+  #     - ./docker/traefik/config/dynamic:/etc/traefik/dynamic_conf:ro
+  #   depends_on:
+  #     - createcert
+  #     - createcertpkcs12
+
+  # traefik-forward-auth:
+  #   extends:
+  #     file: ./docker/traefik/docker-compose.yml
+  #     service: traefik-forward-auth
+  #   depends_on:
+  #     - traefik
+
+  # postgres:
+  #   extends:
+  #     file: ./docker/postgres/docker-compose.yml
+  #     service: postgres
+  #   volumes:
+  #     - ./docker/postgres/data/postgresql:/var/lib/postgresql/data
+  #     - ./docker/postgres/config/postgresql.conf:/etc/postgresql/postgresql.conf
+  #   depends_on:
+  #     - traefik
+
+  # postgres-admin:
+  #   extends:
+  #     file: ./docker/postgres/docker-compose.yml
+  #     service: postgres-admin
+  #   depends_on:
+  #     - traefik
+  #     - postgres
+
+  # postgres-backup:
+  #   extends:
+  #     file: ./docker/postgres/docker-compose.yml
+  #     service: postgres-backup
+  #   depends_on:
+  #     - traefik
+  #     - postgres
+
+  # keycloak:
+  #   extends:
+  #     file: ./docker/keycloak/docker-compose.yml
+  #     service: keycloak
+  #   depends_on:
+  #     - traefik
+
+
+networks:
+  internal:
+  traefik:
+  keycloak:
+

@@ -1,0 +1,165 @@
+version: "3.8"
+
+services:
+
+  traefik:
+    image: traefik
+    security_opt:
+      - no-new-privileges:true
+    restart: "always"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./services/infrastructure/traefik/certs:/letsencrypt
+      - ./services/infrastructure/traefik/config/dynamic:/etc/traefik/dynamic_conf
+    ports:
+      - ${TRAEFIK_HTTP_PORT}:${TRAEFIK_HTTP_PORT}
+      - ${TRAEFIK_HTTPS_PORT}:${TRAEFIK_HTTPS_PORT}
+      - ${TRAEFIK_API_PORT}:${TRAEFIK_API_PORT}
+    command:
+      - "--log.level=DEBUG"
+      - "--accesslog=true"
+      - "--api.insecure=true" # Don't do that in production!
+      - "--api.dashboard=true" # Don't do that in production!
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--global.sendAnonymousUsage=true"
+
+      # Entrypoints for HTTP, HTTPS, and NX (TCP + UDP)
+      - "--entrypoints.web.address=:${TRAEFIK_HTTP_PORT}"
+      - "--entrypoints.websecure.address=:${TRAEFIK_HTTPS_PORT}"
+      - "--entrypoints.traefik.address=:${TRAEFIK_API_PORT}"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      # - "--entrypoints.web.http.redirections.entryPoint.permanent=true"
+
+      # Manual keys
+      - "--providers.file.directory=/etc/traefik/dynamic_conf"
+      - "--providers.file.watch=true"
+    labels:
+      traefik.frontend.priority: 1
+      traefik.enable: true
+      traefik.http.routers.traefik.rule: "Host(`${TRAEFIK_SUBDOMAIN_NAME}.${DOMAIN_NAME}`)"
+      traefik.http.routers.traefik.service: api@internal
+      traefik.http.services.api.loadbalancer.passHostHeader: true
+
+
+      # # Global Redirect HTTP to HTTPS
+      # traefik.http.routers.http-catchall.rule: "hostregexp(`{host:.+}`)"
+      # traefik.http.routers.http-catchall.entrypoints: websecure
+      # traefik.http.routers.http-catchall.middlewares: redirect-to-https
+      # traefik.http.middlewares.redirect-to-https.redirectscheme.scheme: https
+      # traefik.http.middlewares.redirect-to-https.redirectscheme.permanent: true
+    environment:
+      - TZ=${GLOBAL_TZ}
+
+    networks:
+      - internal
+      - traefik
+
+  # will only do this when files are not there
+  createcert:
+    image: brunopadz/mkcert-docker
+    environment:
+      - TZ=${GLOBAL_TZ}
+    working_dir: /root/.local/share/mkcert
+    command:
+      - /bin/sh
+      - -c
+      - "test ! -f mkcert.key && mkcert -install && mkcert -key-file mkcert.key -cert-file mkcert.pem -client ${TRAEFIK_CERT_DOMAINS}"
+    volumes:
+      - ./services/infrastructure/traefik/certs:/root/.local/share/mkcert
+
+  # will only do this when files are not there
+  createcertpkcs12:
+    image: frapsoft/openssl
+    environment:
+      - TZ=${GLOBAL_TZ}
+    working_dir: /export
+    entrypoint: ""
+    command:
+      - /bin/ash
+      - -c
+      - "test ! -f mkcert.pfx && openssl pkcs12 -export -out mkcert.pfx -in mkcert.pem -inkey mkcert.key -certfile rootCA.pem -passout pass:${TRAEFIK_CERT_KEYPASS}"
+    volumes:
+      - ./services/infrastructure/traefik/certs:/export
+
+
+#   traefik-forward-auth:
+#     image: thomseddon/traefik-forward-auth
+
+# #   image: thomseddon/traefik-forward-auth
+# #   image: funkypenguin/traefik-forward-auth
+#     container_name: traefik-forward-auth
+#     networks:
+#       - traefik
+#     ports:
+#       - ${TRAEFIK_FORMAWARD_AUTH_PORT}:4181
+#     environment:
+#       - TZ=${GLOBAL_TZ}
+#       - DEFAULT_PROVIDER=oidc
+#       - DEFAULT_ACTION=auth
+#       # This is based on using the selected realm. Create a new client, this will go into your CLIENT_ID, CLIENT_SECRET details.
+#       - PROVIDERS_OIDC_ISSUER_URL=${PROVIDERS_OIDC_ISSUER_URL}
+#       - PROVIDERS_OIDC_CLIENT_ID=${PROVIDERS_OIDC_CLIENT_ID}
+#       - PROVIDERS_OIDC_CLIENT_SECRET=${PROVIDERS_OIDC_CLIENT_SECRET}
+#       - SECRET=THISISASECRET
+#       # - INSECURE_COOKIE=true
+#       - AUTH_HOST=auth.${DOMAIN_NAME}
+#       - URL_PATH=/_oauth
+#       - COOKIE_DOMAIN=${DOMAIN_NAME}
+#       - COOKIE_NAME=_forward_auth
+#       - CSRF_COOKIE_NAME=_forward_auth_csrf
+#       - LOG_LEVEL=warn
+#       # https://github.com/thomseddon/traefik-forward-auth/blob/master/examples/docker-compose-oidc.yml
+#       # https://github.com/thomseddon/traefik-forward-auth#user-restriction
+#       #      WHITELIST: ${EMAIL}
+#       #      COOKIE_SECURE: "true"
+#       - LIFETIME=2592000
+#       # - LIFETIME=43200 # 12 hours
+#     restart: always
+#     labels:
+#       - "traefik.enable=true"
+#       # Define the URL to access this app
+#       - "traefik.http.routers.traefik-forward-auth.rule=Host(`auth.${DOMAIN_NAME}`)"
+#       # Access via HTTPS only
+#       - "traefik.http.routers.traefik-forward-auth.entrypoints=websecure"
+#       - "traefik.frontend.rule=Host:auth.${DOMAIN_NAME},"
+#       - "traefik.frontend.headers.SSLHost=oauth.${DOMAIN_NAME}"
+#       - "traefik.frontend.passHostHeader=true"
+#       - "traefik.frontend.headers.SSLForceHost=true"
+#       - "traefik.frontend.headers.customResponseHeaders=X-Robots-Tag:noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex"
+#       - "traefik.frontend.headers.SSLRedirect=true"
+#       - "traefik.frontend.headers.browserXSSFilter=true"
+#       - "traefik.frontend.headers.contentTypeNosniff=true"
+#       - "traefik.frontend.headers.forceSTSHeader=true"
+#       - "traefik.frontend.headers.STSSeconds=315360000"
+#       - "traefik.frontend.headers.STSIncludeSubdomains=true"
+#       - "traefik.frontend.headers.STSPreload=true"
+#       - "traefik.frontend.headers.frameDeny=true"
+#       - "traefik.backend=traefik-forward-auth"
+#       - "traefik.frontend.auth.forward.address=http://traefik-forward-auth:${TRAEFIK_FORMAWARD_AUTH_PORT}"
+#       - "traefik.frontend.auth.forward.trustForwardHeader=true"
+#       - "traefik.frontend.auth.forward.authResponseHeaders=X-Forwarded-User"
+#       - "traefik.http.routers.traefik-forward-auth.service=forward-auth-svc"
+#       - "traefik.http.services.forward-auth-svc.loadbalancer.server.port=${TRAEFIK_FORMAWARD_AUTH_PORT}"
+#       # TLS is used to protect the domain
+#       - "traefik.http.routers.traefik-forward-auth.tls=true"
+#       - "traefik.http.routers.traefik-forward-auth.tls.certresolver=leresolver"
+#       - "traefik.http.routers.traefik-forward-auth.tls.domains[0].main=${DOMAIN_NAME}"
+#       - "traefik.http.routers.traefik-forward-auth.tls.domains[0].sans=*.${DOMAIN_NAME}"
+#       # Forward authentication to keycloak
+#       #- "traefik.http.routers.traefik-forward-auth.middlewares=keycloakForwardAuth"
+#       - "traefik.http.routers.traefik-forward-auth.middlewares=myForwardAuth@file"
+#       - "traefik.http.middlewares.keycloakForwardAuth.forwardauth.address=http://traefik-forward-auth:${TRAEFIK_FORMAWARD_AUTH_PORT}/auth"
+# #      - "traefik.http.routers.traefik-forward-auth.middlewares=secured"
+# #      - traefik.http.middlewares.secured.chain.middlewares=https-only@docker,keycloakForwardAuth@docker
+# #      - traefik.http.middlewares.https-only.redirectscheme.scheme=https
+#       - "traefik.http.middlewares.keycloakForwardAuth.forwardauth.trustForwardHeader=true"
+#       - "traefik.http.middlewares.keycloakForwardAuth.forwardauth.authResponseHeaders=X-Auth-User, X-Secret"
+# #      - "traefik.http.middlewares.keycloakForwardAuth.forwardauth.authResponseHeaders=X-Forwarded-User, X-WebAuth-User"
+#       - "traefik.http.middlewares.keycloakForwardAuth.forwardauth.tls.insecureSkipVerify=true"
+
+
+networks:
+  internal:
+  traefik:
+
