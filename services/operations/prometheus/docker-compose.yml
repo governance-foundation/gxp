@@ -1,0 +1,113 @@
+version: "2.4"
+
+services:
+
+  prometheus:
+    image: prom/prometheus
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # ports:
+    #   - 9090:9090
+    environment:
+      - TZ=${GLOBAL_TZ}
+      - ENVIRONMENT
+    command:
+      - "--config.file=/etc/config/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--storage.tsdb.retention.time=2h"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+      - "--storage.tsdb.min-block-duration=5m"
+      - "--storage.tsdb.max-block-duration=5m"
+      - "--enable-feature=expand-external-labels"
+    labels:
+      traefik.frontend.priority: 1
+      traefik.enable: true
+      traefik.http.routers.prometheus.rule: "HostRegexp(`prometheus.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.prometheus.entrypoints: web
+      traefik.http.routers.prometheus_https.rule: "HostRegexp(`prometheus.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.prometheus_https.tls: true
+      traefik.http.routers.prometheus_https.entrypoints: websecure
+      traefik.http.services.prometheus.loadbalancer.passHostHeader: true
+      traefik.http.services.prometheus.loadbalancer.server.port: 9090
+      traefik.http.routers.prometheus.middlewares: adminservice-auth
+
+    volumes:
+      - ./config/prom:/etc/config
+      - ./data/prometheus:/prometheus
+    networks:
+      - monitoring
+
+
+  alertmanager:
+    image: prom/alertmanager
+    restart: unless-stopped
+    # ports:
+    #   - "9093:9093"
+    volumes:
+      - "./config/alertmanager:/etc/config"
+      - "./data/alertmanager:/alertmanager"
+    networks:
+      - monitoring
+    environment:
+      - TZ=${GLOBAL_TZ}
+    command:
+      - "--config.file=/etc/config/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    labels:
+      traefik.frontend.priority: 1
+      traefik.enable: true
+      traefik.http.routers.alertmanager.rule: "HostRegexp(`alertmanager.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.alertmanager.entrypoints: web
+      traefik.http.routers.alertmanager_https.rule: "HostRegexp(`alertmanager.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.alertmanager_https.tls: true
+      traefik.http.routers.alertmanager_https.entrypoints: websecure
+      traefik.http.services.alertmanager.loadbalancer.passHostHeader: true
+      traefik.http.routers.alertmanager.middlewares: adminservice-auth
+
+
+  node-exporter:
+    image: prom/node-exporter
+    restart: unless-stopped
+    extends:
+      file: ../common/config-tz.yml
+      service: config
+    hostname: "node-exporter"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.ignored-mount-points"
+      - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
+    ports:
+      - 9182:9100
+    profiles:
+      - notwindows
+    networks:
+      - monitoring
+
+  pushgateway:
+    image: prom/pushgateway
+    restart: unless-stopped
+    extends:
+      file: ../common/config-tz.yml
+      service: config
+    hostname: "pushgateway"
+    ports:
+      - "9091:9091"
+    networks:
+      - monitoring
+
+
+networks:
+  internal:
+  monitoring:
+
+volumes:
+  data:

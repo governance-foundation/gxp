@@ -1,0 +1,36 @@
+version: "2.4"
+
+services:
+
+  kafkaui:
+    image: provectuslabs/kafka-ui:latest
+    restart: unless-stopped
+    extends:
+      file: ../common/config-tz.yml
+      service: config
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2181
+#      - SERVER_SERVLET_CONTEXT_PATH=kafkaui
+    # ports:
+    #   - 8180:8080
+    labels:
+      # note that you want this frontened to match the last. otherwise it will match login.${HOST_DOMAIN}"
+      traefik.frontend.priority: 1
+      traefik.enable: true
+      traefik.http.routers.kafkaui.rule: "HostRegexp(`kafkaui.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.kafkaui.entrypoints: web
+      traefik.http.routers.kafkaui_https.rule: "HostRegexp(`kafkaui.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.kafkaui_https.tls: true
+      traefik.http.routers.kafkaui_https.entrypoints: websecure
+      traefik.http.services.kafkaui.loadbalancer.server.port: 8080
+      traefik.http.services.kafkaui.loadbalancer.passHostHeader: true
+      traefik.http.routers.kafkaui.middlewares: adminservice-auth
+
+    networks:
+      - internal
+
+
+networks:
+  internal:

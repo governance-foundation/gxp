@@ -1,0 +1,87 @@
+version: "2.4"
+
+services:
+
+  vault:
+    image: vault
+    hostname: vault
+    # cap_add:
+    #   - IPC_LOCK
+    # privileged: true
+    # ports:
+    #   - 8200:8200
+    volumes:
+      - vault-logs:/vault/logs
+      - vault-data:/vault/file
+      - ./config:/vault/config
+    labels:
+      # note that you want this frontened to match the last. otherwise it will match login.${HOST_DOMAIN}"
+      traefik.frontend.priority: 1
+      traefik.enable: true
+      traefik.http.routers.vault.rule: "HostRegexp(`vault.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.vault.entrypoints: web
+      traefik.http.routers.vault_https.rule: "HostRegexp(`vault.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.vault_https.tls: true
+      traefik.http.routers.vault_https.entrypoints: websecure
+      traefik.http.services.vault.loadbalancer.passHostHeader: true
+      traefik.http.services.vault.loadbalancer.server.port: 8200
+      traefik.http.routers.vault.middlewares: adminservice-auth
+    profiles:
+      - vault
+
+    command:
+      - server
+      - -log-level=trace
+    environment:
+      TZ: "${GLOBAL_TZ}"
+      SKIP_SETCAP: "true"
+    networks:
+      - internal
+      - monitoring
+      - default
+
+  vaultinit:
+    image: vault
+    hostname: vaultinit
+    privileged: true
+    environment:
+      - TZ=${GLOBAL_TZ}
+      - KEYBASE_TEAM=rosterboss
+      - KEYBASE_TEAM_PATH=vault.pass
+      - VAULT_ROOT_TOKEN_PGP_KEY
+      - VAULT_PGP_KEYS
+      - VAULT_KEY_SHARES
+      - VAULT_KEY_THRESHOLD
+    volumes:
+      - ./scripts:/scripts
+      - ./data/vault:/data
+    command:
+      - sh
+      - /scripts/vault-init.sh
+    networks:
+      - internal
+    profiles:
+      - vaultinit
+
+  vaultunseal:
+    image: vault
+    hostname: vaultunseal
+    privileged: true
+    environment:
+      - TZ=${GLOBAL_TZ}
+      - VAULT_KEY
+      - VAULT_ADDR=http://vault:8200
+    command: vault operator unseal $VAULT_KEY
+    networks:
+      - internal
+    profiles:
+      - vaultunseal
+
+
+networks:
+  internal:
+  monitoring:
+
+volumes:
+  vault-data:
+  vault-logs:

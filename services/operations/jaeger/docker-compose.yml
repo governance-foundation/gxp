@@ -1,0 +1,54 @@
+version: "2.4"
+
+services:
+
+  jaeger:
+    image: jaegertracing/all-in-one
+    restart: always
+    hostname: jaeger
+    environment:
+      - TZ=${GLOBAL_TZ}
+      - "COLLECTOR_ZIPKIN_HOST_PORT=:9411"
+      - "SPAN_STORAGE_TYPE=badger"
+      - "BADGER_EPHEMERAL=false"
+      - "BADGER_DIRECTORY_VALUE=/data/data"
+      - "BADGER_DIRECTORY_KEY=/data/key"
+    volumes:
+      - jaeger-data:/data
+    # ports:
+    #   # accept zipkin.thrift over compact thrift protocol (deprecated, used by legacy clients only)
+    #   #- "5775:5775/udp"
+    #   # accept jaeger.thrift over compact thrift protocol
+    #   - "6831:6831/udp"
+    #   # accept jaeger.thrift over binary thrift protocol
+    #   - "6832:6832/udp"
+    #   # serve configs
+    #   - "5778:5778"
+    #   # serve frontend
+    #   - "16686:16686"
+    #   # accept jaeger.thrift directly from clients
+    #   - "14268:14268"
+    #   # accept model.proto
+    #   - "14250:14250"
+    #   # Zipkin compatible endpoint (optional)
+    #   - "9411:9411"
+    labels:
+      traefik.frontend.priority: 1
+      traefik.enable: true
+      traefik.http.routers.jaeger.rule: "HostRegexp(`jaeger.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.jaeger.entrypoints: web
+      traefik.http.routers.jaeger_https.rule: "HostRegexp(`jaeger.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.jaeger_https.tls: true
+      traefik.http.routers.jaeger_https.entrypoints: websecure
+      traefik.http.services.jaeger.loadbalancer.server.port: 16686
+      traefik.http.services.jaeger.loadbalancer.passHostHeader: true
+      traefik.http.routers.jaeger.middlewares: adminservice-auth
+
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+
+volumes:
+  jaeger-data:

@@ -1,0 +1,97 @@
+version: "3.8"
+
+services:
+
+  mongo:
+    image: mongo:4
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./data:/data/db
+    environment:
+      - TZ=${GLOBAL_TZ}
+      - NODE_ENV
+      - MONGO_URI
+      - MONGO_INITDB_ROOT_USERNAME
+      - MONGO_INITDB_ROOT_PASSWORD
+    labels:
+      traefik.frontend.priority: 1
+      traefik.enable: true
+      traefik.backend: mongo
+      traefik.tcp.routers.mongo.rule: HostSNI(`*`)
+      traefik.tcp.routers.mongo.entrypoints: mongo
+      traefik.tcp.routers.mongo.service: mongo
+      traefik.tcp.services.mongo.loadbalancer.server.port: 27017
+      traefik.tcp.routers.mongo.middlewares: localhost-ip-whitelist@docker
+    networks:
+      - internal
+
+  mongodb-exporter:
+    image: bitnami/mongodb-exporter
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - TZ=${GLOBAL_TZ}
+      - MONGO_URI
+    command:
+      - --web.listen-address=:27018
+      - --mongodb.uri=${MONGO_URI}
+      - --log.level=error
+      - --mongodb.global-conn-pool
+    networks:
+      - internal
+      - monitoring
+
+  mongosetup:
+    image: node
+    security_opt:
+      - no-new-privileges:true
+    entrypoint: ['node','specialScripts/init.js']
+    environment:
+      - TZ=${GLOBAL_TZ}
+      - NODE_ENV
+      - MONGO_HOST
+      - MONGO_URI
+    working_dir: /rosterboss
+    volumes:
+      - ./:/rosterboss
+    networks:
+      - internal
+    profiles:
+      - init
+
+  mongoui:
+    image: mongo-express
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - TZ=${GLOBAL_TZ}
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+      - ME_CONFIG_MONGODB_URL=${MONGO_URI}
+    labels:
+      # note that you want this frontened to match the last. otherwise it will match login.${HOST_DOMAIN}"
+      traefik.frontend.priority: 1
+      traefik.enable: true
+      traefik.http.routers.mongoui.rule: "HostRegexp(`mongoui.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.mongoui.entrypoints: web
+      traefik.http.routers.mongoui_https.rule: "HostRegexp(`mongoui.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.mongoui_https.tls: true
+      traefik.http.routers.mongoui_https.entrypoints: websecure
+      traefik.http.services.mongoui.loadbalancer.server.port: 8081
+      traefik.http.services.mongoui.loadbalancer.passHostHeader: true
+      traefik.http.routers.mongoui.middlewares: adminservice-auth
+
+    networks:
+      - internal
+
+networks:
+  internal:
+  monitoring:
+
+volumes:
+  data:

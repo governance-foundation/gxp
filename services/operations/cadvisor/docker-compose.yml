@@ -1,0 +1,40 @@
+version: "2.4"
+
+services:
+
+  cadvisor:
+    image: google/cadvisor
+    restart: unless-stopped
+    hostname: cadvisor
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    # ports:
+    #   - 9088:9088
+    networks:
+      - monitoring
+    command:
+      - --port=9088
+    labels:
+      # note that you want this frontened to match the last. otherwise it will match login.${HOST_DOMAIN}"
+      traefik.frontend.priority: 1
+      traefik.enable: true
+      traefik.http.routers.cadvisor.rule: "HostRegexp(`cadvisor.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.cadvisor.entrypoints: web
+      traefik.http.routers.cadvisor_https.rule: "HostRegexp(`cadvisor.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.cadvisor_https.tls: true
+      traefik.http.routers.cadvisor_https.entrypoints: websecure
+      traefik.http.services.cadvisor.loadbalancer.server.port: 9088
+      traefik.http.services.cadvisor.loadbalancer.passHostHeader: true
+      traefik.http.routers.cadvisor.middlewares: adminservice-auth
+    environment:
+      - TZ=${GLOBAL_TZ}
+
+networks:
+  monitoring:
+
+volumes:
+  data:

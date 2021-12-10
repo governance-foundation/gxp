@@ -1,0 +1,49 @@
+version: "3.8"
+
+services:
+
+  kafka:
+    image: bitnami/kafka
+    restart: always
+    environment:
+      - TZ=${GLOBAL_TZ}
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_OPTS=-javaagent:/usr/app/jmx_prometheus_javaagent.jar=9095:/usr/app/jmx_prometheus_javaagent.yml
+      - KAFKA_HEAP_OPTS=-Xmx512M -Xms512M
+    volumes:
+      - ./config/jmx-exporter/kafka-general.yml:/usr/app/jmx_prometheus_javaagent.yml
+      - ./config/jmx-exporter/jmx_prometheus_javaagent.jar:/usr/app/jmx_prometheus_javaagent.jar
+    labels:
+      traefik.enable: false
+      traefik.http.routers.kafka.rule: "Host(`localhost`)"
+      traefik.http.routers.kafka.entrypoints: web
+      traefik.port: 9092
+      traefik.backend: kafka
+    # ports:
+    #   - 9092:9092
+    #   - 9095:9095
+    networks:
+      - internal
+      - monitoring
+
+  kafka-lag-exporter:
+    image: lightbend/kafka-lag-exporter
+    hostname: kafka-lag-exporter
+    restart: always
+    # ports:
+    #   - 9094:9094
+    labels:
+      traefik.enable: false
+      traefik.http.routers.kafka-lag-exporter.rule: "Host(`localhost`)"
+      traefik.http.routers.kafka-lag-exporter.entrypoints: web
+      traefik.port: 9094
+      traefik.backend: kafka-lag-exporter
+    networks:
+      - monitoring
+    volumes:
+      - ./config/kafka-lag-exporter/:/opt/docker/conf/
+
+networks:
+  internal:

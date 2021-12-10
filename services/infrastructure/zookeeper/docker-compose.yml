@@ -1,0 +1,33 @@
+version: "2.4"
+
+services:
+
+  zookeeper:
+    image: bitnami/zookeeper
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    # ports:
+    #   - 2181:2181
+    #   - 2182:2182
+    environment:
+      TZ: "${GLOBAL_TZ}"
+      ZOO_PORT_NUMBER: "2181"
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+      ZOO_PROMETHEUS_METRICS_PORT_NUMBER: "2182"
+      ZOO_ENABLE_PROMETHEUS_METRICS: "yes"
+      ZOO_HEAP_SIZE: "512"
+    labels:
+      traefik.frontend.priority: 1
+      traefik.enable: false
+      traefik.port: 2181
+      traefik.backend: zookeeper
+      traefik.http.routers.zookeeper.rule: "Host(`localhost`)"
+      traefik.http.routers.zookeeper.entrypoints: web
+    networks:
+      - internal
+      - monitoring
+
+networks:
+  internal:
+  monitoring:

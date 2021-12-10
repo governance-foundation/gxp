@@ -1,0 +1,125 @@
+version: "2.4"
+
+services:
+
+  grafana:
+    image: grafana/grafana
+    restart: unless-stopped
+    hostname: grafana
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+      - ./config:/etc/config
+      - ./config/provisioning:/etc/grafana/provisioning
+    environment:
+      TZ: "${GLOBAL_TZ}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_AUTO_ASSIGN_ORG: "true"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: "Admin"
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+      GF_RENDERING_SERVER_URL: http://grafanarenderer:9081/render
+      GF_RENDERING_CALLBACK_URL: http://localhost:9080/
+      GF_LOG_FILTERS: rendering:debug
+      GF_SERVER_DOMAIN: localhost
+      GF_SERVER_HTTP_PORT: 9080
+      GF_DATE_FORMATS_DEFAULT_TIMEZONE: America/Los_Angeles
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/docker_containers.json
+      GF_ALERTING_EXECUTE_ALERTS: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_AUTH_PROXY_ENABLED: "false"
+      GF_AUTH_PROXY_HEADER_NAME: X-Auth-Request-User
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_PROXY_HEADERS: Email:X-Auth-Request-Email
+      GF_AUTH_PROXY_ENABLE_LOGIN_TOKEN: "true"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_DISABLE_SIGNOUT_MENU: "true"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_NAME_ENABLED: "RosterBoss.App"
+      GF_AUTH_ANONYMOUS_ORG_ROLE_ENABLED: "Admin"
+      GF_AUTH_ANONYMOUS_HIDE_VERSION: "true"
+      GF_EXPLORE_ENABLED: "true"
+    networks:
+      - monitoring
+    # ports:
+    #   - "9190:9080"
+    # logging:
+    #   driver: loki
+    #   options:
+    #     loki-url: "http://loki:3100/loki/api/v1/push"
+    #     loki-retries: 5
+    #     loki-batch-size: 400
+    labels:
+      traefik.frontend.priority: 1
+      traefik.enable: true
+      traefik.http.routers.grafana.rule: "HostRegexp(`grafana.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.grafana.entrypoints: web
+      traefik.http.routers.grafana_https.rule: "HostRegexp(`grafana.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.grafana_https.tls: true
+      traefik.http.routers.grafana_https.entrypoints: websecure
+      traefik.http.services.grafana.loadbalancer.server.port: 9080
+      traefik.http.services.grafana.loadbalancer.passHostHeader: true
+      traefik.http.routers.grafana.middlewares: adminservice-auth
+
+  grafanarenderer:
+    image: grafana/grafana-image-renderer
+    restart: unless-stopped
+    hostname: grafgrafanarendererana
+    # ports:
+    #   - 9081:8081
+    networks:
+      - monitoring
+    labels:
+      traefik.docker.network: monitoring
+      traefik.backend: grafanarenderer
+      traefik.enable: false
+      traefik.http.routers.grafanarenderer.rule: "Host(`localhost`)"
+      traefik.http.routers.grafanarenderer.entrypoints: web
+    environment:
+      - TZ=${GLOBAL_TZ}
+
+  loki:
+    image: grafana/loki
+    restart: unless-stopped
+    environment:
+      - TZ=${GLOBAL_TZ}
+    volumes:
+      - ./config/:/mnt/config
+    networks:
+      - monitoring
+    # ports:
+    #   - "3100:3100"
+    #   - "9096:9096"
+    command:
+      - "--config.file=/mnt/config/loki-config.yaml"
+    labels:
+      traefik.frontend.priority: 1
+      traefik.enable: true
+      traefik.http.routers.loki.rule: "HostRegexp(`loki.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.loki.entrypoints: web
+      traefik.http.routers.loki_https.rule: "HostRegexp(`loki.admin.rosterboss.{suffix:[a-z]+}`)"
+      traefik.http.routers.loki_https.tls: true
+      traefik.http.routers.loki_https.entrypoints: websecure
+      traefik.http.services.loki.loadbalancer.passHostHeader: true
+      traefik.http.routers.loki.middlewares: adminservice-auth
+
+  promtail-docker-logs:
+    image: grafana/promtail
+    restart: unless-stopped
+    environment:
+      - TZ=${GLOBAL_TZ}
+    volumes:
+      - /var/log:/var/log
+      - ./config/:/mnt/config
+    command:
+      - "--config.file=/mnt/config/promtail-config.yaml"
+    networks:
+      - monitoring
+
+
+networks:
+  monitoring:
+
+volumes:
+  grafana-data:
